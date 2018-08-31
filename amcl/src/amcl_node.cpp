@@ -49,6 +49,7 @@
 #include "nav_msgs/GetMap.h"
 #include "nav_msgs/SetMap.h"
 #include "std_srvs/Empty.h"
+#include <amcl/ChangeMap.h>
 
 // For transform support
 #include "tf/transform_broadcaster.h"
@@ -151,6 +152,9 @@ class AmclNode
     bool setMapCallback(nav_msgs::SetMap::Request& req,
                         nav_msgs::SetMap::Response& res);
 
+    bool changeMapCallback(amcl::ChangeMap::Request& req,
+                            amcl::ChangeMap::Response& res);
+
     void laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan);
     void initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
     void handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceStamped& msg);
@@ -174,8 +178,11 @@ class AmclNode
     std::string base_frame_id_;
     std::string global_frame_id_;
 
+    std::string static_map_srv_;
+
     bool use_map_topic_;
     bool first_map_only_;
+    bool change_map_received_;
 
     ros::Duration gui_publish_period;
     ros::Time save_pose_last_time;
@@ -236,6 +243,7 @@ class AmclNode
     ros::ServiceServer global_loc_srv_;
     ros::ServiceServer nomotion_update_srv_; //to let amcl update samples without requiring motion
     ros::ServiceServer set_map_srv_;
+    ros::ServiceServer change_map_srv_;
     ros::Subscriber initial_pose_sub_old_;
     ros::Subscriber map_sub_;
 
@@ -398,6 +406,7 @@ AmclNode::AmclNode() :
   private_nh_.param("odom_frame_id", odom_frame_id_, std::string("odom"));
   private_nh_.param("base_frame_id", base_frame_id_, std::string("base_link"));
   private_nh_.param("global_frame_id", global_frame_id_, std::string("map"));
+  private_nh_.param("static_map_srv", static_map_srv_, std::string("static_map"));
   private_nh_.param("resample_interval", resample_interval_, 2);
   double tmp_tol;
   private_nh_.param("transform_tolerance", tmp_tol, 0.1);
@@ -426,7 +435,8 @@ AmclNode::AmclNode() :
                                          this);
   nomotion_update_srv_= nh_.advertiseService("request_nomotion_update", &AmclNode::nomotionUpdateCallback, this);
   set_map_srv_= nh_.advertiseService("set_map", &AmclNode::setMapCallback, this);
-
+  change_map_srv_= nh_.advertiseService("change_map", &AmclNode::changeMapCallback, this);
+  change_map_received_ = false;
   laser_scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(nh_, scan_topic_, 100);
   laser_scan_filter_ = 
           new tf::MessageFilter<sensor_msgs::LaserScan>(*laser_scan_sub_, 
@@ -772,7 +782,7 @@ AmclNode::requestMap()
   nav_msgs::GetMap::Request  req;
   nav_msgs::GetMap::Response resp;
   ROS_INFO("Requesting the map...");
-  while(!ros::service::call("static_map", req, resp))
+  while(!ros::service::call(static_map_srv_, req, resp))
   {
     ROS_WARN("Request for map failed; trying again...");
     ros::Duration d(0.5);
@@ -802,7 +812,13 @@ AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid& msg)
            msg.info.width,
            msg.info.height,
            msg.info.resolution);
-  
+
+  if(change_map_received_ == true){
+    change_map_received_ = false;
+    global_frame_id_ = msg.header.frame_id;
+    ROS_WARN("global_frame_id has been changed to %s", global_frame_id_.c_str());
+  }
+
   if(msg.header.frame_id != global_frame_id_)
     ROS_WARN("Frame_id of map received:'%s' doesn't match global_frame_id:'%s'. This could cause issues with reading published topics",
              msg.header.frame_id.c_str(),
@@ -928,6 +944,28 @@ AmclNode::convertMap( const nav_msgs::OccupancyGrid& map_msg )
 
   return map;
 }
+
+ bool AmclNode::changeMapCallback(amcl::ChangeMap::Request& req,
+                                  amcl::ChangeMap::Response& res){
+  change_map_received_ = true;
+  
+  if(use_map_topic_) {
+    map_sub_.shutdown();
+    map_sub_ = nh_.subscribe(req.topic, 1, &AmclNode::mapReceived, this);
+  } else {
+    std::string topic = std::string(req.topic);
+    int index = topic.find_last_of('/', topic.length());
+    topic = topic.substr(0, index);
+    ROS_INFO("%s", topic.c_str());
+    static_map_srv_ = topic.c_str() + std::string("/static_map");
+    requestMap();
+  }
+
+  // TODO: It should spread the particles
+
+  res.ret = true;
+  return true;
+  }
 
 AmclNode::~AmclNode()
 {

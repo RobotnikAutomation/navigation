@@ -15,6 +15,18 @@ find_package(catkin REQUIRED
 
 find_package(Boost REQUIRED)
 
+## Generate services in the 'srv' folder
+add_service_files(
+    DIRECTORY srv
+    FILES
+    ChangeMap.srv
+)
+
+generate_messages(
+DEPENDENCIES
+   std_msgs
+)
+
 # dynamic reconfigure
 generate_dynamic_reconfigure_options(
     cfg/AMCL.cfg
