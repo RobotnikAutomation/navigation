@@ -39,8 +39,8 @@
 #include <boost/shared_ptr.hpp>
 #include <costmap_2d/costmap_2d_ros.h>
 
-namespace cm=costmap_2d;
-namespace rm=geometry_msgs;
+namespace cm = costmap_2d;
+namespace rm = geometry_msgs;
 
 using std::vector;
 using rm::PoseStamped;
@@ -48,8 +48,8 @@ using std::string;
 using cm::Costmap2D;
 using cm::Costmap2DROS;
 
-namespace navfn {
-
+namespace navfn
+{
 class NavfnWithCostmap : public NavfnROS
 {
 public:
@@ -63,7 +63,6 @@ private:
   ros::Subscriber pose_sub_;
 };
 
-
 bool NavfnWithCostmap::makePlanService(MakeNavPlan::Request& req, MakeNavPlan::Response& resp)
 {
   vector<PoseStamped> path;
@@ -72,33 +71,33 @@ bool NavfnWithCostmap::makePlanService(MakeNavPlan::Request& req, MakeNavPlan::R
   req.goal.header.frame_id = "/map";
   bool success = makePlan(req.start, req.goal, path);
   resp.plan_found = success;
-  if (success) {
+  if (success)
+  {
     resp.path = path;
   }
 
   return true;
 }
 
-void NavfnWithCostmap::poseCallback(const rm::PoseStamped::ConstPtr& goal) {
-    tf::Stamped<tf::Pose> global_pose;
-    cmap_->getRobotPose(global_pose);
+void NavfnWithCostmap::poseCallback(const rm::PoseStamped::ConstPtr& goal)
+{
+  tf::Stamped<tf::Pose> global_pose;
+  cmap_->getRobotPose(global_pose);
   vector<PoseStamped> path;
   rm::PoseStamped start;
   start.header.stamp = global_pose.stamp_;
-    start.header.frame_id = global_pose.frame_id_;
-    start.pose.position.x = global_pose.getOrigin().x();
-    start.pose.position.y = global_pose.getOrigin().y();
-    start.pose.position.z = global_pose.getOrigin().z();
-    start.pose.orientation.x = global_pose.getRotation().x();
-    start.pose.orientation.y = global_pose.getRotation().y();
-    start.pose.orientation.z = global_pose.getRotation().z();
-    start.pose.orientation.w = global_pose.getRotation().w();
-    makePlan(start, *goal, path);
+  start.header.frame_id = global_pose.frame_id_;
+  start.pose.position.x = global_pose.getOrigin().x();
+  start.pose.position.y = global_pose.getOrigin().y();
+  start.pose.position.z = global_pose.getOrigin().z();
+  start.pose.orientation.x = global_pose.getRotation().x();
+  start.pose.orientation.y = global_pose.getRotation().y();
+  start.pose.orientation.z = global_pose.getRotation().z();
+  start.pose.orientation.w = global_pose.getRotation().w();
+  makePlan(start, *goal, path);
 }
 
-
-NavfnWithCostmap::NavfnWithCostmap(string name, Costmap2DROS* cmap) : 
-  NavfnROS(name, cmap)
+NavfnWithCostmap::NavfnWithCostmap(string name, Costmap2DROS* cmap) : NavfnROS(name, cmap)
 {
   ros::NodeHandle private_nh("~");
   cmap_ = cmap;
@@ -106,9 +105,9 @@ NavfnWithCostmap::NavfnWithCostmap(string name, Costmap2DROS* cmap) :
   pose_sub_ = private_nh.subscribe<rm::PoseStamped>("goal", 1, &NavfnWithCostmap::poseCallback, this);
 }
 
-} // namespace
+}  // namespace
 
-int main (int argc, char** argv)
+int main(int argc, char** argv)
 {
   ros::init(argc, argv, "global_planner");
 
@@ -121,19 +120,3 @@ int main (int argc, char** argv)
   ros::spin();
   return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
