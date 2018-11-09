@@ -1,3 +1,4 @@
 string topic
 ---
-bool ret
+bool ret # maybe this could be changed to success, as it is more ros standard
+string message
