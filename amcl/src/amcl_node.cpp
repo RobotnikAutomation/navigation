@@ -49,7 +49,8 @@
 #include "nav_msgs/GetMap.h"
 #include "nav_msgs/SetMap.h"
 #include "std_srvs/Empty.h"
-#include <amcl/ChangeMap.h>
+#include "amcl/ChangeMap.h"
+#include "amcl/SetPose.h"
 
 // For transform support
 #include "tf/transform_broadcaster.h"
@@ -151,9 +152,10 @@ class AmclNode
                                     std_srvs::Empty::Response& res);
     bool setMapCallback(nav_msgs::SetMap::Request& req,
                         nav_msgs::SetMap::Response& res);
-
     bool changeMapCallback(amcl::ChangeMap::Request& req,
                             amcl::ChangeMap::Response& res);
+    bool setPoseCallback(amcl::SetPose::Request& req,
+                            amcl::SetPose::Response& res);
 
     void laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan);
     void initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
@@ -244,6 +246,7 @@ class AmclNode
     ros::ServiceServer nomotion_update_srv_; //to let amcl update samples without requiring motion
     ros::ServiceServer set_map_srv_;
     ros::ServiceServer change_map_srv_;
+    ros::ServiceServer set_pose_srv_;
     ros::Subscriber initial_pose_sub_old_;
     ros::Subscriber map_sub_;
 
@@ -435,6 +438,7 @@ AmclNode::AmclNode() :
                                          this);
   nomotion_update_srv_= nh_.advertiseService("request_nomotion_update", &AmclNode::nomotionUpdateCallback, this);
   set_map_srv_= nh_.advertiseService("set_map", &AmclNode::setMapCallback, this);
+  set_pose_srv_= nh_.advertiseService("set_pose", &AmclNode::setPoseCallback, this);
   change_map_srv_= nh_.advertiseService("change_map", &AmclNode::changeMapCallback, this);
   change_map_received_ = false;
   laser_scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(nh_, scan_topic_, 100);
@@ -1074,6 +1078,32 @@ AmclNode::setMapCallback(nav_msgs::SetMap::Request& req,
 {
   handleMapMessage(req.map);
   handleInitialPoseMessage(req.initial_pose);
+  res.success = true;
+  return true;
+}
+
+bool
+AmclNode::setPoseCallback(amcl::SetPose::Request& req,
+                         amcl::SetPose::Response& res)
+{
+  geometry_msgs::PoseWithCovarianceStamped pose = req.pose;
+  bool all_zeros = true;
+  for (size_t i = 0; i < pose.pose.covariance.size(); i++)
+    all_zeros &= (pose.pose.covariance[i] != 0);
+  
+  if (all_zeros == true)
+  {
+    ROS_WARN("Setting pose with all covariances to 0. That's nonsense. Using default values");
+    pose.pose.covariance[0] = pose.pose.covariance[7] = 0.25;
+    pose.pose.covariance[35] = 0.068;
+    res.message = "I have set new pose, but you should call me with a covariance";
+  }
+  else
+  {
+    res.message = "Perfect";
+  }
+
+  handleInitialPoseMessage(pose);
   res.success = true;
   return true;
 }

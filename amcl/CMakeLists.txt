@@ -20,11 +20,13 @@ add_service_files(
     DIRECTORY srv
     FILES
     ChangeMap.srv
+    SetPose.srv
 )
 
 generate_messages(
 DEPENDENCIES
    std_msgs
+   geometry_msgs
 )
 
 # dynamic reconfigure
