@@ -1089,7 +1089,7 @@ AmclNode::setPoseCallback(amcl::SetPose::Request& req,
   geometry_msgs::PoseWithCovarianceStamped pose = req.pose;
   bool all_zeros = true;
   for (size_t i = 0; i < pose.pose.covariance.size(); i++)
-    all_zeros &= (pose.pose.covariance[i] != 0);
+    all_zeros &= (pose.pose.covariance[i] == 0);
   
   if (all_zeros == true)
   {
@@ -1102,7 +1102,7 @@ AmclNode::setPoseCallback(amcl::SetPose::Request& req,
   {
     res.message = "Perfect";
   }
-
+  ROS_INFO_STREAM("Called set pose server");
   handleInitialPoseMessage(pose);
   res.success = true;
   return true;
