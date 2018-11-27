@@ -108,6 +108,11 @@ namespace move_base {
     private_nh.param("clearing_rotation_allowed", clearing_rotation_allowed_, true);
     private_nh.param("recovery_behavior_enabled", recovery_behavior_enabled_, true);
 
+    //check goal in global frame
+    private_nh.param("check_goal_reached_in_global_frame", check_goal_reached_in_global_frame_, false);
+    private_nh.param("global_xy_tolerance", global_xy_tolerance_, 0.1);
+    private_nh.param("global_yaw_tolerance", global_yaw_tolerance_, 0.1);
+
     //create the ros wrapper for the planner's costmap... and initializer a pointer we'll use with the underlying map
     planner_costmap_ros_ = new costmap_2d::Costmap2DROS("global_costmap", tf_);
     planner_costmap_ros_->pause();
@@ -547,6 +552,37 @@ namespace move_base {
     tf::poseStampedTFToMsg(global_pose, global_pose_msg);
     return global_pose_msg;
   }
+
+  bool MoveBase::isGoalReachedInGlobalFrame()
+  {
+    if (check_goal_reached_in_global_frame_ == false)
+        return true;
+
+    //  planner_goal_;
+    geometry_msgs::PoseStamped planner_goal_in_global_frame = goalToGlobalFrame(planner_goal_);
+
+    tf::Stamped<tf::Pose> global_pose;
+    planner_costmap_ros_->getRobotPose(global_pose);
+
+    double dx = global_pose.getOrigin().x() - planner_goal_in_global_frame.pose.position.x;
+    double dy = global_pose.getOrigin().y() - planner_goal_in_global_frame.pose.position.y;
+  
+    double da = 0;
+    if (isQuaternionValid(planner_goal_in_global_frame.pose.orientation) == true)
+    {
+      tf::Quaternion planner_orientation;
+      tf::quaternionMsgToTF(planner_goal_in_global_frame.pose.orientation, planner_orientation);
+      da = planner_orientation.angleShortestPath(global_pose.getRotation());
+    }
+  
+    double xy_tolerance = global_xy_tolerance_ * global_xy_tolerance_; // squared distance
+    double yaw_tolerance = 0.1;
+  
+    if (dx * dx + dy * dy < xy_tolerance)  // and da < yaw_tolerance. For now we dont want to check for orientation
+      return true;
+    return false;
+  }
+
 
   void MoveBase::wakePlanner(const ros::TimerEvent& event)
   {

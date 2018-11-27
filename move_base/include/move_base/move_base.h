@@ -168,6 +168,8 @@ namespace move_base {
 
       geometry_msgs::PoseStamped goalToGlobalFrame(const geometry_msgs::PoseStamped& goal_pose_msg);
 
+      bool isGoalReachedInGlobalFrame();
+
       /**
        * @brief This is used to wake the planner at periodic intervals.
        */
@@ -197,6 +199,9 @@ namespace move_base {
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;
       double oscillation_timeout_, oscillation_distance_;
+
+      bool check_goal_reached_in_global_frame_;
+      double global_xy_tolerance_, global_yaw_tolerance_;
 
       MoveBaseState state_;
       RecoveryTrigger recovery_trigger_;
