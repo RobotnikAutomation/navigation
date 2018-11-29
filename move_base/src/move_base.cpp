@@ -555,8 +555,10 @@ namespace move_base {
 
   bool MoveBase::isGoalReachedInGlobalFrame()
   {
-    if (check_goal_reached_in_global_frame_ == false)
+    if (check_goal_reached_in_global_frame_ == false) {
+        ROS_INFO("I do not check goal in global frame");
         return true;
+    }
 
     //  planner_goal_;
     geometry_msgs::PoseStamped planner_goal_in_global_frame = goalToGlobalFrame(planner_goal_);
@@ -578,8 +580,11 @@ namespace move_base {
     double xy_tolerance = global_xy_tolerance_ * global_xy_tolerance_; // squared distance
     double yaw_tolerance = 0.1;
   
-    if (dx * dx + dy * dy < xy_tolerance)  // and da < yaw_tolerance. For now we dont want to check for orientation
+    if (dx * dx + dy * dy < xy_tolerance) {  // and da < yaw_tolerance. For now we dont want to check for orientation
+      ROS_INFO("Goal reached in global frame!");
       return true;
+    }
+
     return false;
   }
 
@@ -909,7 +914,9 @@ namespace move_base {
         ROS_DEBUG_NAMED("move_base","In controlling state.");
 
         //check to see if we've reached our goal
-        if(tc_->isGoalReached()){
+        if(tc_->isGoalReached()) {
+          ROS_INFO("Goal reached by LocalPlanner");
+          if (isGoalReachedInGlobalFrame()){
           ROS_DEBUG_NAMED("move_base","Goal reached!");
           resetState();
 
@@ -920,6 +927,7 @@ namespace move_base {
 
           as_->setSucceeded(move_base_msgs::MoveBaseResult(), "Goal reached.");
           return true;
+          }
         }
 
         //check for an oscillation condition
