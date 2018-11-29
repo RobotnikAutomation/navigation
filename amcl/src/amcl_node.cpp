@@ -122,6 +122,7 @@ class AmclNode
 
     int process();
     void savePoseToServer();
+    bool do_not_set_pose_;
 
   private:
     tf::TransformBroadcaster* tfb_;
@@ -338,6 +339,7 @@ AmclNode::AmclNode() :
   boost::recursive_mutex::scoped_lock l(configuration_mutex_);
 
   // Grab params off the param server
+  private_nh_.param("do_not_set_pose", do_not_set_pose_, true);
   private_nh_.param("use_map_topic", use_map_topic_, false);
   private_nh_.param("first_map_only", first_map_only_, false);
 
@@ -1086,6 +1088,11 @@ bool
 AmclNode::setPoseCallback(amcl::SetPose::Request& req,
                          amcl::SetPose::Response& res)
 {
+  if (do_not_set_pose_ == true) {
+    res.success = true;
+    return true;
+  }
+
   geometry_msgs::PoseWithCovarianceStamped pose = req.pose;
   bool all_zeros = true;
   for (size_t i = 0; i < pose.pose.covariance.size(); i++)
@@ -1094,8 +1101,8 @@ AmclNode::setPoseCallback(amcl::SetPose::Request& req,
   if (all_zeros == true)
   {
     ROS_WARN("Setting pose with all covariances to 0. That's nonsense. Using default values");
-    pose.pose.covariance[0] = pose.pose.covariance[7] = 0.25;
-    pose.pose.covariance[35] = 0.068;
+    pose.pose.covariance[0] = pose.pose.covariance[7] = 0.125;
+    pose.pose.covariance[35] = 0.03;
     res.message = "I have set new pose, but you should call me with a covariance";
   }
   else
