@@ -289,7 +289,7 @@ class AmclNode
     void checkLaserReceived(const ros::TimerEvent& event);
 
     ros::Duration tf_publish_when_no_data_interval_;
-    void tfPublishWheNoData(const ros::TimerEvent& event);
+    void tfPublishWhenNoData(const ros::TimerEvent& event);
 };
 
 std::vector<std::pair<int,int> > AmclNode::free_space_indices;
@@ -486,7 +486,7 @@ AmclNode::AmclNode() :
   private_nh_.param("tf_publish_when_no_data_rate", tmp, 5.0);
   if (tmp > 0) {
     tf_publish_when_no_data_interval_ = ros::Duration(1/tmp);
-    tf_publish_when_no_data_timer_ = nh_.createTimer(tf_publish_when_no_data_interval_, boost::bind(&AmclNode::tfPublishWheNoData, this, _1));
+    tf_publish_when_no_data_timer_ = nh_.createTimer(tf_publish_when_no_data_interval_, boost::bind(&AmclNode::tfPublishWhenNoData, this, _1));
   }
 }
 
@@ -799,9 +799,8 @@ AmclNode::checkLaserReceived(const ros::TimerEvent& event)
 }
 
 void
-AmclNode::tfPublishWheNoData(const ros::TimerEvent& event)
+AmclNode::tfPublishWhenNoData(const ros::TimerEvent& event)
 {
-  ROS_INFO("HeyYO");
   ros::Duration d = ros::Time::now() - last_laser_received_ts_;
   if (d > tf_publish_when_no_data_interval_)  
   {
@@ -814,7 +813,6 @@ AmclNode::tfPublishWheNoData(const ros::TimerEvent& event)
                                           transform_expiration,
                                           global_frame_id_, odom_frame_id_);
       this->tfb_->sendTransform(tmp_tf_stamped);
-      ROS_INFO("HeyYmmm");
     }
   }
 }
