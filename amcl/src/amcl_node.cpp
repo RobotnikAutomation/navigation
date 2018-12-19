@@ -49,6 +49,7 @@
 #include "nav_msgs/GetMap.h"
 #include "nav_msgs/SetMap.h"
 #include "std_srvs/Empty.h"
+#include "std_srvs/SetBool.h"
 #include "amcl/ChangeMap.h"
 #include "amcl/SetPose.h"
 
@@ -151,6 +152,8 @@ class AmclNode
                                     std_srvs::Empty::Response& res);
     bool nomotionUpdateCallback(std_srvs::Empty::Request& req,
                                     std_srvs::Empty::Response& res);
+    bool toggleLocalizationCallback(std_srvs::SetBool::Request& req, 
+                                    std_srvs::SetBool::Response& res);
     bool setMapCallback(nav_msgs::SetMap::Request& req,
                         nav_msgs::SetMap::Response& res);
     bool changeMapCallback(amcl::ChangeMap::Request& req,
@@ -245,6 +248,7 @@ class AmclNode
     ros::Publisher particlecloud_pub_;
     ros::ServiceServer global_loc_srv_;
     ros::ServiceServer nomotion_update_srv_; //to let amcl update samples without requiring motion
+    ros::ServiceServer toogle_localization_srv_; 
     ros::ServiceServer set_map_srv_;
     ros::ServiceServer change_map_srv_;
     ros::ServiceServer set_pose_srv_;
@@ -274,6 +278,8 @@ class AmclNode
     laser_model_t laser_model_type_;
     bool tf_broadcast_;
 
+    // to update the filter or not
+    bool enabled_;
     void reconfigureCB(amcl::AMCLConfig &config, uint32_t level);
 
     ros::Time last_laser_received_ts_;
@@ -326,6 +332,7 @@ main(int argc, char** argv)
 AmclNode::AmclNode() :
         sent_first_transform_(false),
         latest_tf_valid_(false),
+        enabled_(true),
         map_(NULL),
         pf_(NULL),
         resample_count_(0),
@@ -348,7 +355,7 @@ AmclNode::AmclNode() :
   gui_publish_period = ros::Duration(1.0/tmp);
   private_nh_.param("save_pose_rate", tmp, 0.5);
   save_pose_period = ros::Duration(1.0/tmp);
-
+  
   private_nh_.param("laser_min_range", laser_min_range_, -1.0);
   private_nh_.param("laser_max_range", laser_max_range_, -1.0);
   private_nh_.param("laser_max_beams", max_beams_, 30);
@@ -439,6 +446,7 @@ AmclNode::AmclNode() :
 					 &AmclNode::globalLocalizationCallback,
                                          this);
   nomotion_update_srv_= nh_.advertiseService("request_nomotion_update", &AmclNode::nomotionUpdateCallback, this);
+  toogle_localization_srv_ = nh_.advertiseService("toogle_localization", &AmclNode::toggleLocalizationCallback, this);
   set_map_srv_= nh_.advertiseService("set_map", &AmclNode::setMapCallback, this);
   set_pose_srv_= nh_.advertiseService("set_pose", &AmclNode::setPoseCallback, this);
   change_map_srv_= nh_.advertiseService("change_map", &AmclNode::changeMapCallback, this);
@@ -1073,6 +1081,79 @@ AmclNode::nomotionUpdateCallback(std_srvs::Empty::Request& req,
 	//ROS_INFO("Requesting no-motion update");
 	return true;
 }
+    
+bool AmclNode::toggleLocalizationCallback(std_srvs::SetBool::Request& req, 
+                                          std_srvs::SetBool::Response& res)
+{
+
+  if (enabled_)
+  {
+    if (req.data == true)
+    {
+      res.success = true;
+      res.message = "Already enabled, this call is useless"; 
+      ROS_WARN_STREAM(res.message);
+      return true;
+    }
+    else
+    {
+      enabled_ = false;
+      res.success = true;
+      res.message = "AMCL disabled"; 
+      ROS_WARN_STREAM(res.message);
+      return true;
+    }
+  }
+  if (not enabled_)
+  {
+    if (req.data == false)
+    {
+      res.success = true;
+      res.message = "Already disabled, this call is useless"; 
+      ROS_WARN_STREAM(res.message);
+      return true;
+    }
+    else
+    {
+
+      // In case the client sent us a pose estimate in the past, integrate the
+      // intervening odometric change.
+      tf::StampedTransform tx_global;
+      try
+      {
+        ros::Time now = ros::Time::now();
+        // wait a little for the latest tf to become available
+        tf_->waitForTransform(global_frame_id_, base_frame_id_, now, ros::Duration(0.5));
+        tf_->lookupTransform(global_frame_id_, base_frame_id_, now, tx_global);
+      }
+      catch(tf::TransformException e)
+      {
+         res.message = "Failed to get pose in map frame";
+         res.success = false;
+         ROS_ERROR_STREAM(res.message);
+         return true;
+      }
+   
+      geometry_msgs::PoseWithCovarianceStamped pose;
+      pose.header.stamp = tx_global.stamp_;
+      pose.header.frame_id = tx_global.frame_id_;
+      
+      tf::pointTFToMsg(tx_global.getOrigin(), pose.pose.pose.position);
+      tf::quaternionTFToMsg(tx_global.getRotation(), pose.pose.pose.orientation);
+    
+      pose.pose.covariance[0] = pose.pose.covariance[7] = 0.125;
+      pose.pose.covariance[35] = 0.03;
+
+      enabled_ = true;
+      handleInitialPoseMessage(pose);
+      res.success = true;
+      res.message = "AMCL enabled"; 
+      ROS_WARN_STREAM(res.message);
+      
+      return true;
+    }
+  }
+}
 
 bool
 AmclNode::setMapCallback(nav_msgs::SetMap::Request& req,
@@ -1122,6 +1203,22 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
   if( map_ == NULL ) {
     return;
   }
+  
+  if (not enabled_) {
+    if (latest_tf_valid_ == true and tf_broadcast_ == true)
+    {
+      // We want to send a transform that is good up until a
+      // tolerance time so that odom can be used
+      ros::Time transform_expiration = (laser_scan->header.stamp +
+                                        transform_tolerance_);
+      tf::StampedTransform tmp_tf_stamped(latest_tf_.inverse(),
+                                          transform_expiration,
+                                          global_frame_id_, odom_frame_id_);
+      this->tfb_->sendTransform(tmp_tf_stamped);
+    }
+    return;
+  }
+
   boost::recursive_mutex::scoped_lock lr(configuration_mutex_);
   int laser_index = -1;
 
