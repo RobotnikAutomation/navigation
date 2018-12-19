@@ -263,6 +263,7 @@ class AmclNode
     dynamic_reconfigure::Server<amcl::AMCLConfig> *dsrv_;
     amcl::AMCLConfig default_config_;
     ros::Timer check_laser_timer_;
+    ros::Timer tf_publish_when_no_data_timer_;
 
     int max_beams_, min_particles_, max_particles_;
     double alpha1_, alpha2_, alpha3_, alpha4_, alpha5_;
@@ -280,11 +281,15 @@ class AmclNode
 
     // to update the filter or not
     bool enabled_;
+
     void reconfigureCB(amcl::AMCLConfig &config, uint32_t level);
 
     ros::Time last_laser_received_ts_;
     ros::Duration laser_check_interval_;
     void checkLaserReceived(const ros::TimerEvent& event);
+
+    ros::Duration tf_publish_when_no_data_interval_;
+    void tfPublishWheNoData(const ros::TimerEvent& event);
 };
 
 std::vector<std::pair<int,int> > AmclNode::free_space_indices;
@@ -477,6 +482,12 @@ AmclNode::AmclNode() :
   laser_check_interval_ = ros::Duration(15.0);
   check_laser_timer_ = nh_.createTimer(laser_check_interval_, 
                                        boost::bind(&AmclNode::checkLaserReceived, this, _1));
+
+  private_nh_.param("tf_publish_when_no_data_rate", tmp, 5.0);
+  if (tmp > 0) {
+    tf_publish_when_no_data_interval_ = ros::Duration(1/tmp);
+    tf_publish_when_no_data_timer_ = nh_.createTimer(tf_publish_when_no_data_interval_, boost::bind(&AmclNode::tfPublishWheNoData, this, _1));
+  }
 }
 
 void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
@@ -784,6 +795,27 @@ AmclNode::checkLaserReceived(const ros::TimerEvent& event)
     ROS_WARN("No laser scan received (and thus no pose updates have been published) for %f seconds.  Verify that data is being published on the %s topic.",
              d.toSec(),
              ros::names::resolve(scan_topic_).c_str());
+  }
+}
+
+void
+AmclNode::tfPublishWheNoData(const ros::TimerEvent& event)
+{
+  ROS_INFO("HeyYO");
+  ros::Duration d = ros::Time::now() - last_laser_received_ts_;
+  if (d > tf_publish_when_no_data_interval_)  
+  {
+    if (latest_tf_valid_ == true and tf_broadcast_ == true)
+    {
+      // We want to send a transform that is good up until a
+      ros::Time transform_expiration = (ros::Time::now() +
+                                        transform_tolerance_);
+      tf::StampedTransform tmp_tf_stamped(latest_tf_.inverse(),
+                                          transform_expiration,
+                                          global_frame_id_, odom_frame_id_);
+      this->tfb_->sendTransform(tmp_tf_stamped);
+      ROS_INFO("HeyYmmm");
+    }
   }
 }
 
