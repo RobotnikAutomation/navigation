@@ -248,7 +248,7 @@ class AmclNode
     ros::Publisher particlecloud_pub_;
     ros::ServiceServer global_loc_srv_;
     ros::ServiceServer nomotion_update_srv_; //to let amcl update samples without requiring motion
-    ros::ServiceServer toogle_localization_srv_; 
+    ros::ServiceServer toggle_localization_srv_; 
     ros::ServiceServer set_map_srv_;
     ros::ServiceServer change_map_srv_;
     ros::ServiceServer set_pose_srv_;
@@ -451,7 +451,7 @@ AmclNode::AmclNode() :
 					 &AmclNode::globalLocalizationCallback,
                                          this);
   nomotion_update_srv_= nh_.advertiseService("request_nomotion_update", &AmclNode::nomotionUpdateCallback, this);
-  toogle_localization_srv_ = nh_.advertiseService("toogle_localization", &AmclNode::toggleLocalizationCallback, this);
+  toggle_localization_srv_ = nh_.advertiseService("toggle_localization", &AmclNode::toggleLocalizationCallback, this);
   set_map_srv_= nh_.advertiseService("set_map", &AmclNode::setMapCallback, this);
   set_pose_srv_= nh_.advertiseService("set_pose", &AmclNode::setPoseCallback, this);
   change_map_srv_= nh_.advertiseService("change_map", &AmclNode::changeMapCallback, this);
