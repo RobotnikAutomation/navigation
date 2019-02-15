@@ -163,7 +163,10 @@ class AmclNode
 
     void laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan);
     void initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
+    void correctPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
     void handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceStamped& msg);
+    void handleCorrectPoseMessage(const geometry_msgs::PoseWithCovarianceStamped& msg);
+
     void mapReceived(const nav_msgs::OccupancyGridConstPtr& msg);
 
     void handleMapMessage(const nav_msgs::OccupancyGrid& msg);
@@ -203,7 +206,7 @@ class AmclNode
 
     message_filters::Subscriber<sensor_msgs::LaserScan>* laser_scan_sub_;
     tf::MessageFilter<sensor_msgs::LaserScan>* laser_scan_filter_;
-    ros::Subscriber initial_pose_sub_;
+    ros::Subscriber initial_pose_sub_, correct_pose_sub_;
     std::vector< AMCLLaser* > lasers_;
     std::vector< bool > lasers_update_;
     std::map< std::string, int > frame_to_laser_;
@@ -221,6 +224,7 @@ class AmclNode
 
     //Nomotion update control
     bool m_force_update;  // used to temporarily let amcl update samples even when no motion occurs...
+    bool m_force_correction; // used to update amcl internal when we have received a pose correction
 
     AMCLOdom* odom_;
     AMCLLaser* laser_;
@@ -256,6 +260,8 @@ class AmclNode
     ros::Subscriber map_sub_;
 
     amcl_hyp_t* initial_pose_hyp_;
+    amcl_hyp_t* current_pose_hyp_;
+    bool current_pose_hyp_valid_;
     bool first_map_received_;
     bool first_reconfigure_call_;
 
@@ -345,6 +351,8 @@ AmclNode::AmclNode() :
         laser_(NULL),
 	      private_nh_("~"),
         initial_pose_hyp_(NULL),
+        current_pose_hyp_(NULL),
+        current_pose_hyp_valid_(false),
         first_map_received_(false),
         first_reconfigure_call_(true)
 {
@@ -465,6 +473,10 @@ AmclNode::AmclNode() :
   laser_scan_filter_->registerCallback(boost::bind(&AmclNode::laserReceived,
                                                    this, _1));
   initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
+  correct_pose_sub_ = nh_.subscribe("correctpose", 2, &AmclNode::correctPoseReceived, this);
+
+  current_pose_hyp_ = new amcl_hyp_t();
+  current_pose_hyp_valid_ = false;
 
   if(use_map_topic_) {
     map_sub_ = nh_.subscribe("map", 1, &AmclNode::mapReceived, this);
@@ -473,6 +485,7 @@ AmclNode::AmclNode() :
     requestMap();
   }
   m_force_update = false;
+  m_force_correction = false;
 
   dsrv_ = new dynamic_reconfigure::Server<amcl::AMCLConfig>(ros::NodeHandle("~"));
   dynamic_reconfigure::Server<amcl::AMCLConfig>::CallbackType cb = boost::bind(&AmclNode::reconfigureCB, this, _1, _2);
@@ -632,6 +645,8 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
                                                    this, _1));
 
   initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
+  correct_pose_sub_ = nh_.subscribe("correctpose", 2, &AmclNode::correctPoseReceived, this);
+
 }
 
 
@@ -934,7 +949,7 @@ AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid& msg)
                                     laser_likelihood_max_dist_);
     ROS_INFO("Done initializing likelihood field model.");
   }
-
+  
   // In case the initial pose message arrived before the first map,
   // try to apply the initial pose now that the map has arrived.
   applyInitialPose();
@@ -1200,6 +1215,7 @@ AmclNode::setPoseCallback(amcl::SetPose::Request& req,
                          amcl::SetPose::Response& res)
 {
   if (do_not_set_pose_ == true) {
+    res.message = "I have set pose service disabled";
     res.success = true;
     return true;
   }
@@ -1463,8 +1479,11 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     }
   }
 
-  if(resampled || force_publication)
+  if(resampled || force_publication || m_force_correction)
   {
+    ROS_INFO("m_force_correction: %d", m_force_correction);
+
+    m_force_correction = false;
     // Read out the current hypotheses
     double max_weight = 0.0;
     int max_weight_hyp = -1;
@@ -1499,12 +1518,19 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
                 hyps[max_weight_hyp].pf_pose_mean.v[0],
                 hyps[max_weight_hyp].pf_pose_mean.v[1],
                 hyps[max_weight_hyp].pf_pose_mean.v[2]);
+      ROS_INFO("Max weight pose: %.3f %.3f %.3f",
+                hyps[max_weight_hyp].pf_pose_mean.v[0],
+                hyps[max_weight_hyp].pf_pose_mean.v[1],
+                hyps[max_weight_hyp].pf_pose_mean.v[2]);
 
       /*
          puts("");
          pf_matrix_fprintf(hyps[max_weight_hyp].pf_pose_cov, stdout, "%6.3f");
          puts("");
        */
+      
+      *current_pose_hyp_ = hyps[max_weight_hyp];
+      current_pose_hyp_valid_ = true;
 
       geometry_msgs::PoseWithCovarianceStamped p;
       // Fill in the header
@@ -1570,9 +1596,12 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
         ROS_DEBUG("Failed to subtract base to odom transform");
         return;
       }
-
+      ROS_INFO("I am here!");
       latest_tf_ = tf::Transform(tf::Quaternion(odom_to_map.getRotation()),
                                  tf::Point(odom_to_map.getOrigin()));
+                                 geometry_msgs::Transform pip;
+tf::transformTFToMsg(latest_tf_, pip);
+      ROS_INFO_STREAM(pip);
       latest_tf_valid_ = true;
 
       if (tf_broadcast_ == true)
@@ -1725,5 +1754,61 @@ AmclNode::applyInitialPose()
 
     delete initial_pose_hyp_;
     initial_pose_hyp_ = NULL;
+
   }
 }
+
+void
+AmclNode::correctPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
+{
+  handleCorrectPoseMessage(*msg);
+}
+
+void
+AmclNode::handleCorrectPoseMessage(const geometry_msgs::PoseWithCovarianceStamped& msg)
+{
+  boost::recursive_mutex::scoped_lock cpl(configuration_mutex_);
+
+  if (current_pose_hyp_valid_ == false)
+  {
+    ROS_WARN("I am not initialized, I do not know what to do with that pose. Skipping");
+    return; // what to do? assume is like handleInitialPose
+  }
+  pf_vector_t delta;
+  delta.v[0] = msg.pose.pose.position.x - current_pose_hyp_->pf_pose_mean.v[0];
+  delta.v[1] = msg.pose.pose.position.y - current_pose_hyp_->pf_pose_mean.v[1];
+  delta.v[2] = angle_diff(tf::getYaw(msg.pose.pose.orientation), current_pose_hyp_->pf_pose_mean.v[2]);
+
+  ROS_INFO("Correcting pose received %f %f %f", msg.pose.pose.position.x, msg.pose.pose.position.y, tf::getYaw(msg.pose.pose.orientation));
+  ROS_INFO("Correcting pose current  %f %f %f", current_pose_hyp_->pf_pose_mean.v[0], current_pose_hyp_->pf_pose_mean.v[1], current_pose_hyp_->pf_pose_mean.v[2]);
+  ROS_INFO("Correcting pose delta    %f %f %f", delta.v[0], delta.v[1], delta.v[2]);
+  pf_sample_set_t *set;
+
+  //set = pf_->sets + pf_->current_set;
+
+  set = pf_->sets;
+  for (int i = 0; i < set->sample_count; i++)
+  {
+    pf_sample_t* sample = set->samples + i;
+
+    //// Apply correction update
+    sample->pose.v[0] += delta.v[0];
+    sample->pose.v[1] += delta.v[1];
+    sample->pose.v[2] += delta.v[2];
+  }
+  set = pf_->sets + 1; //pf_->current_set;
+  for (int i = 0; i < set->sample_count; i++)
+  {
+    pf_sample_t* sample = set->samples + i;
+
+    //// Apply correction update
+    sample->pose.v[0] += delta.v[0];
+    sample->pose.v[1] += delta.v[1];
+    sample->pose.v[2] += delta.v[2];
+  }
+
+  //  m_force_update = true; // correction = true;
+  m_force_correction = true;
+}
+
+
