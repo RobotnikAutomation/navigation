@@ -1115,7 +1115,6 @@ AmclNode::nomotionUpdateCallback(std_srvs::Empty::Request& req,
 bool AmclNode::toggleLocalizationCallback(std_srvs::SetBool::Request& req, 
                                           std_srvs::SetBool::Response& res)
 {
-
   if (enabled_)
   {
     if (req.data == true)
@@ -1153,11 +1152,12 @@ bool AmclNode::toggleLocalizationCallback(std_srvs::SetBool::Request& req,
       {
         ros::Time now = ros::Time::now();
         // wait a little for the latest tf to become available
-        tf_->waitForTransform(global_frame_id_, base_frame_id_, now, ros::Duration(0.5));
+        tf_->waitForTransform(global_frame_id_, base_frame_id_, now, ros::Duration(5.0));
         tf_->lookupTransform(global_frame_id_, base_frame_id_, now, tx_global);
       }
       catch(tf::TransformException e)
       {
+	 ROS_ERROR_STREAM("Exception: " << e.what());
          res.message = "Failed to get pose in map frame";
          res.success = false;
          ROS_ERROR_STREAM(res.message);
