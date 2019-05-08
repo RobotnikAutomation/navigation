@@ -1151,8 +1151,13 @@ bool AmclNode::toggleLocalizationCallback(std_srvs::SetBool::Request& req,
       try
       {
         ros::Time now = ros::Time::now();
+
         // wait a little for the latest tf to become available
-        tf_->waitForTransform(global_frame_id_, base_frame_id_, now, ros::Duration(5.0));
+        do
+        {
+          ROS_INFO("Waiting for transform to come up");
+        } while (false == tf_->waitForTransform(global_frame_id_, base_frame_id_, now, ros::Duration(5.0)));
+
         tf_->lookupTransform(global_frame_id_, base_frame_id_, now, tx_global);
       }
       catch(tf::TransformException e)
