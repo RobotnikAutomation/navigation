@@ -468,6 +468,33 @@ int pf_resample_limit(pf_t *pf, int k)
   return n;
 }
 
+// Move the filter (samples and clusters) some delta
+void pf_move_filter(pf_t *pf, pf_vector_t delta)
+{
+  for (int j = 0; j < 2; j++) 
+  {
+    pf_sample_set_t *set = pf->sets + j;
+    for (int i = 0; i < set->sample_count; i++)
+    {
+      pf_sample_t* sample = set->samples + i;
+
+      //// Apply delta update
+      sample->pose.v[0] += delta.v[0];
+      sample->pose.v[1] += delta.v[1];
+      sample->pose.v[2] += delta.v[2];
+    }
+    for (int i = 0; i < set->cluster_count; i++)
+    {
+      pf_cluster_t* cluster = set->clusters + i;
+
+      //// Apply delta update
+      cluster->mean.v[0] += delta.v[0];
+      cluster->mean.v[1] += delta.v[1];
+      cluster->mean.v[2] += delta.v[2];
+    }
+  }
+}
+
 
 // Re-compute the cluster statistics for a sample set
 void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)

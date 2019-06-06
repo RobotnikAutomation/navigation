@@ -82,6 +82,7 @@ class AMCLOdom : public AMCLSensor
   // has been updated.
   public: virtual bool UpdateAction(pf_t *pf, AMCLSensorData *data);
 
+  public: virtual bool UpdateNoise(double *noise, AMCLSensorData *data);
   // Current data timestamp
   private: double time;
   
