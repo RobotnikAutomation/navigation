@@ -1794,16 +1794,19 @@ AmclNode::handleCorrectPoseMessage(const geometry_msgs::PoseWithCovarianceStampe
     return; // what to do? assume is like handleInitialPose
   }
   
-  ROS_INFO("Correcting pose to (%.6f): %.3f %.3f %.3f",
-           ros::Time::now().toSec(),
-           msg.pose.pose.position.x,
-           msg.pose.pose.position.y,
-           tf::getYaw(msg.pose.pose.orientation));
-  
   pf_vector_t delta;
   delta.v[0] = msg.pose.pose.position.x - current_pose_hyp_->pf_pose_mean.v[0];
   delta.v[1] = msg.pose.pose.position.y - current_pose_hyp_->pf_pose_mean.v[1];
   delta.v[2] = angle_diff(tf::getYaw(msg.pose.pose.orientation), current_pose_hyp_->pf_pose_mean.v[2]);
+  
+  ROS_INFO("Correcting pose to (%.6f): %.3f %.3f %.3f (delta: %.3f %.3f %.3f)",
+           ros::Time::now().toSec(),
+           msg.pose.pose.position.x,
+           msg.pose.pose.position.y,
+           tf::getYaw(msg.pose.pose.orientation),
+           delta.v[0],
+           delta.v[1],
+           delta.v[2]);
   
   pf_move_filter(pf_, delta);
   m_force_correction = true;
