@@ -1175,7 +1175,7 @@ bool AmclNode::toggleLocalizationCallback(std_srvs::SetBool::Request& req,
       }
       catch(tf::TransformException e)
       {
-	 ROS_ERROR_STREAM("Exception: " << e.what());
+	     ROS_ERROR_STREAM("Exception: " << e.what());
          res.message = "Failed to get pose in map frame";
          res.success = false;
          ROS_ERROR_STREAM(res.message);
@@ -1193,7 +1193,7 @@ bool AmclNode::toggleLocalizationCallback(std_srvs::SetBool::Request& req,
       pose.pose.covariance[35] = 0.03;
 
       enabled_ = true;
-      handleInitialPoseMessage(pose);
+      handleCorrectPoseMessage(pose);
       res.success = true;
       res.message = "AMCL enabled"; 
       ROS_WARN_STREAM(res.message);
@@ -1364,7 +1364,7 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     resample_count_ = 0;
   }
   // If the robot has moved, update the filter
-  else if(pf_init_ && lasers_update_[laser_index])
+  else if(pf_init_ && lasers_update_[laser_index] && !m_force_correction)
   {
     //printf("pose\n");
     //pf_vector_fprintf(pose, stdout, "%.3f");
@@ -1786,7 +1786,7 @@ AmclNode::handleCorrectPoseMessage(const geometry_msgs::PoseWithCovarianceStampe
     return; // what to do? assume is like handleInitialPose
   }
   
-  ROS_INFO("Correctoing pose to (%.6f): %.3f %.3f %.3f",
+  ROS_INFO("Correcting pose to (%.6f): %.3f %.3f %.3f",
            ros::Time::now().toSec(),
            msg.pose.pose.position.x,
            msg.pose.pose.position.y,
