@@ -1359,6 +1359,9 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     for(unsigned int i=0; i < lasers_update_.size(); i++)
       lasers_update_[i] = true;
 
+    // If we are initing pose, do not update for this sensor data (so pose is initialized to the received pose)
+    lasers_update_[laser_index] = false;
+
     force_publication = true;
 
     resample_count_ = 0;
@@ -1381,6 +1384,13 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 
     // Pose at last filter update
     //this->pf_odom_pose = pose;
+  }
+
+  // when forcing a correction, do not update pose
+  if (m_force_correction)
+  {
+    pf_odom_pose_ = pose;
+    lasers_update_[laser_index] = false;
   }
 
   bool resampled = false;
@@ -1466,38 +1476,36 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 
     // Publish the resulting cloud
     // TODO: set maximum rate for publishing
-    if (!m_force_update) {
-      geometry_msgs::PoseArray cloud_msg;
-      cloud_msg.header.stamp = ros::Time::now();
-      cloud_msg.header.frame_id = global_frame_id_;
-      cloud_msg.poses.resize(set->sample_count);
-      for(int i=0;i<set->sample_count;i++)
-      {
-        tf::poseTFToMsg(tf::Pose(tf::createQuaternionFromYaw(set->samples[i].pose.v[2]),
-                                 tf::Vector3(set->samples[i].pose.v[0],
-                                           set->samples[i].pose.v[1], 0)),
-                        cloud_msg.poses[i]);
-      }
-      particlecloud_pub_.publish(cloud_msg);
-    }
+     if (!m_force_update) {
+       geometry_msgs::PoseArray cloud_msg;
+       cloud_msg.header.stamp = ros::Time::now();
+       cloud_msg.header.frame_id = global_frame_id_;
+       cloud_msg.poses.resize(set->sample_count);
+       for(int i=0;i<set->sample_count;i++)
+       {
+         tf::poseTFToMsg(tf::Pose(tf::createQuaternionFromYaw(set->samples[i].pose.v[2]),
+                                  tf::Vector3(set->samples[i].pose.v[0],
+                                            set->samples[i].pose.v[1], 0)),
+                         cloud_msg.poses[i]);
+       }
+       particlecloud_pub_.publish(cloud_msg);
+     }
   }
-  else
-  {
-    if (m_force_correction) {
-      geometry_msgs::PoseArray cloud_msg;
-      cloud_msg.header.stamp = ros::Time::now();
-      cloud_msg.header.frame_id = global_frame_id_;
-      pf_sample_set_t* set = pf_->sets + pf_->current_set;
-      cloud_msg.poses.resize(set->sample_count);
-      for(int i=0;i<set->sample_count;i++)
-      {
-        tf::poseTFToMsg(tf::Pose(tf::createQuaternionFromYaw(set->samples[i].pose.v[2]),
-                                 tf::Vector3(set->samples[i].pose.v[0],
-                                           set->samples[i].pose.v[1], 0)),
-                        cloud_msg.poses[i]);
-      }
-      particlecloud_pub_.publish(cloud_msg);
+
+  if (m_force_correction or force_publication) {
+    geometry_msgs::PoseArray cloud_msg;
+    cloud_msg.header.stamp = ros::Time::now();
+    cloud_msg.header.frame_id = global_frame_id_;
+    pf_sample_set_t* set = pf_->sets + pf_->current_set;
+    cloud_msg.poses.resize(set->sample_count);
+    for(int i=0;i<set->sample_count;i++)
+    {
+      tf::poseTFToMsg(tf::Pose(tf::createQuaternionFromYaw(set->samples[i].pose.v[2]),
+                               tf::Vector3(set->samples[i].pose.v[0],
+                                         set->samples[i].pose.v[1], 0)),
+                      cloud_msg.poses[i]);
     }
+    particlecloud_pub_.publish(cloud_msg);
   }
 
   if(resampled || force_publication || m_force_correction)
