@@ -166,6 +166,9 @@ void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_dat
 // Resample the distribution
 void pf_update_resample(pf_t *pf);
 
+// Move the filter some delta
+void pf_move_filter(pf_t *pf, pf_vector_t delta);
+
 // set selective resampling parameter
 void pf_set_selective_resampling(pf_t *pf, int selective_resampling);
 

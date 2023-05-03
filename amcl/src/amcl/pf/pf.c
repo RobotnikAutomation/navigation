@@ -138,6 +138,7 @@ void pf_init(pf_t *pf, pf_vector_t mean, pf_matrix_t cov)
   int i;
   pf_sample_set_t *set;
   pf_sample_t *sample;
+  pf_cluster_t *cluster;
   pf_pdf_gaussian_t *pdf;
   
   set = pf->sets + pf->current_set;
@@ -149,8 +150,15 @@ void pf_init(pf_t *pf, pf_vector_t mean, pf_matrix_t cov)
 
   pdf = pf_pdf_gaussian_alloc(mean, cov);
     
+  // force first sample to be the Initialize pose, and with double weight
+  sample = set->samples;
+  sample->weight = 2.0 * 1.0 / pf->max_samples;
+  sample->pose = mean;
+  // Add sample to histogram
+  pf_kdtree_insert(set->kdtree, sample->pose, sample->weight);
+
   // Compute the new sample poses
-  for (i = 0; i < set->sample_count; i++)
+  for (i = 1; i < set->sample_count; i++)
   {
     sample = set->samples + i;
     sample->weight = 1.0 / pf->max_samples;
@@ -166,6 +174,10 @@ void pf_init(pf_t *pf, pf_vector_t mean, pf_matrix_t cov)
     
   // Re-compute cluster statistics
   pf_cluster_stats(pf, set); 
+
+  // force first cluster to be the initialization pose
+  cluster = set->clusters;
+  cluster->mean = mean;
 
   //set converged to 0
   pf_init_converged(pf);
@@ -552,6 +564,34 @@ int pf_resample_limit(pf_t *pf, int k)
   
   pf->limit_cache[k-1] = n;
   return n;
+}
+
+// Move the filter (samples and clusters) some delta
+void pf_move_filter(pf_t *pf, pf_vector_t delta)
+{
+  // 2 are the number of sets
+  for (int j = 0; j < 2; j++) 
+  {
+    pf_sample_set_t *set = pf->sets + j;
+    for (int i = 0; i < set->sample_count; i++)
+    {
+      pf_sample_t* sample = set->samples + i;
+
+      //// Apply delta update
+      sample->pose.v[0] += delta.v[0];
+      sample->pose.v[1] += delta.v[1];
+      sample->pose.v[2] += delta.v[2];
+    }
+    for (int i = 0; i < set->cluster_count; i++)
+    {
+      pf_cluster_t* cluster = set->clusters + i;
+
+      //// Apply delta update
+      cluster->mean.v[0] += delta.v[0];
+      cluster->mean.v[1] += delta.v[1];
+      cluster->mean.v[2] += delta.v[2];
+    }
+  }
 }
 
 
