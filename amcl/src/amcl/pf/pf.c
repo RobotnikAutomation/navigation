@@ -618,19 +618,22 @@ void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
       set->cluster_count = cidx + 1;
     
     // Update the cluster statistics
-    if(sample->p > max_p)    
+   /* if(sample->p > max_p)    
     {
       max_p = sample->p;
     }
     
     cluster->p = max_p;
-    
+    */
     //cluster->p += sample->p / set->sample_count;
 
     cluster = set->clusters + cidx;
 
     cluster->count += 1;
     cluster->weight += sample->weight;
+    
+    if (cluster->p < sample->p)
+      cluster->p = sample->p;
 
     count += 1;
     weight += sample->weight;
