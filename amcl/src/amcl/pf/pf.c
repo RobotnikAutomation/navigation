@@ -583,6 +583,7 @@ void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
     cluster->weight = 0;
     cluster->mean = pf_vector_zero();
     cluster->cov = pf_matrix_zero();
+    cluster->p = 0;
 
     for (j = 0; j < 4; j++)
       cluster->m[j] = 0.0;
@@ -633,8 +634,11 @@ void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
     cluster->weight += sample->weight;
     
     if (cluster->p < sample->p)
+    { 
+      printf("%f\n", sample->p);
       cluster->p = sample->p;
-
+}
+else       printf("no cluster: %f", sample->p);
     count += 1;
     weight += sample->weight;
 

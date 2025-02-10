@@ -242,6 +242,12 @@ class AmclNode
     bool getOdomPose(geometry_msgs::PoseStamped& pose,
                      double& x, double& y, double& yaw,
                      const ros::Time& t, const std::string& f);
+    
+    double rescaleValue(double value, 
+                        double input_min, 
+                        double input_max, 
+                        double output_min, 
+                        double output_max);
 
     //time for tolerance on the published transform,
     //basically defines how long a map->odom transform is good for
@@ -276,7 +282,7 @@ class AmclNode
     int max_beams_, min_particles_, max_particles_;
     double alpha1_, alpha2_, alpha3_, alpha4_, alpha5_;
     double alpha_slow_, alpha_fast_;
-    double z_hit_, z_short_, z_max_, z_rand_, sigma_hit_, lambda_short_;
+    double z_hit_, z_short_, z_max_, z_rand_, sigma_hit_, lambda_short_, match_min_value_, match_max_value_;
   //beam skip related params
     bool do_beamskip_;
     double beam_skip_distance_, beam_skip_threshold_, beam_skip_error_threshold_;
@@ -398,6 +404,8 @@ AmclNode::AmclNode() :
     private_nh_.param("beam_skip_error_threshold", beam_skip_error_threshold_, 0.9);
   }
 
+  private_nh_.param("laser_match_min_value", match_min_value_, 1.6);
+  private_nh_.param("laser_match_max_value", match_max_value_, 11.5);
   private_nh_.param("laser_z_hit", z_hit_, 0.95);
   private_nh_.param("laser_z_short", z_short_, 0.1);
   private_nh_.param("laser_z_max", z_max_, 0.05);
@@ -1049,6 +1057,28 @@ AmclNode::getOdomPose(geometry_msgs::PoseStamped& odom_pose,
   return true;
 }
 
+double AmclNode::rescaleValue(double value, 
+                        double input_min, 
+                        double input_max, 
+                        double output_min, 
+                        double output_max)
+{
+  double output_value = output_min + (output_max - output_min) * (value - input_min) / (input_max - input_min);
+
+  if(output_value < 0)
+  {
+    return 0;
+  }
+  else if(output_value > 100)
+  {
+    return 100;
+  }
+  else
+  {
+    return output_value;
+  }
+}
+
 
 pf_vector_t
 AmclNode::uniformPoseGenerator(void* arg)
@@ -1471,8 +1501,9 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
       pose_pub_.publish(p);
       last_published_pose = p;
 
-      std_msgs::Float64 pose_quality_msg;
-      pose_quality_msg.data = max_match;
+      std_msgs::Float64 pose_quality_msg; 
+      double pose_quality_percentage = rescaleValue(max_match, match_min_value_, match_max_value_, 0, 100);
+      pose_quality_msg.data = pose_quality_percentage;
       pose_quality_pub_.publish(pose_quality_msg);
 
       ROS_DEBUG("New pose: %6.3f %6.3f %6.3f",
