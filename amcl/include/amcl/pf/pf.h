@@ -63,6 +63,9 @@ typedef struct
 
   // Weight for this pose
   double weight;
+
+  // localization quality of particle
+  double p;
   
 } pf_sample_t;
 
@@ -82,6 +85,9 @@ typedef struct
 
   // Workspace
   double m[4], c[2][2];
+
+  // localization quality of cluster
+  double p;
   
 } pf_cluster_t;
 
@@ -105,6 +111,8 @@ typedef struct _pf_sample_set_t
   pf_matrix_t cov;
   int converged; 
   double n_effective;
+  // localization quality of the set
+  double p;
 } pf_sample_set_t;
 
 
@@ -140,6 +148,10 @@ typedef struct _pf_t
 
   // boolean parameter to enamble/diable selective resampling
   int selective_resampling;
+
+  // localization quality of whole filter
+  double p;
+
 } pf_t;
 
 
@@ -175,7 +187,7 @@ void pf_get_cep_stats(pf_t *pf, pf_vector_t *mean, double *var);
 // Compute the statistics for a particular cluster.  Returns 0 if
 // there is no such cluster.
 int pf_get_cluster_stats(pf_t *pf, int cluster, double *weight,
-                         pf_vector_t *mean, pf_matrix_t *cov);
+                         pf_vector_t *mean, pf_matrix_t *cov, double *p);
 
 // Re-compute the cluster statistics for a sample set
 void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set);

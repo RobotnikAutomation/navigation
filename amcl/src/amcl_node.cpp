@@ -52,6 +52,7 @@
 #include "nav_msgs/GetMap.h"
 #include "nav_msgs/SetMap.h"
 #include "std_srvs/Empty.h"
+#include "std_msgs/Float64.h"
 
 // For transform support
 #include "tf2/LinearMath/Transform.h"
@@ -249,6 +250,7 @@ class AmclNode
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
     ros::Publisher pose_pub_;
+    ros::Publisher pose_quality_pub_;
     ros::Publisher particlecloud_pub_;
     ros::ServiceServer global_loc_srv_;
     ros::ServiceServer nomotion_update_srv_; //to let amcl update samples without requiring motion
@@ -475,6 +477,7 @@ AmclNode::AmclNode() :
   tfl_.reset(new tf2_ros::TransformListener(*tf_));
 
   pose_pub_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("amcl_pose", 2, true);
+  pose_quality_pub_ = nh_.advertise<std_msgs::Float64>("amcl_pose_quality", 2, true);
   particlecloud_pub_ = nh_.advertise<geometry_msgs::PoseArray>("particlecloud", 2, true);
   global_loc_srv_ = nh_.advertiseService("global_localization", 
 					 &AmclNode::globalLocalizationCallback,
@@ -1360,13 +1363,20 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
         tf2::convert(q, cloud_msg.poses[i].orientation);
       }
       particlecloud_pub_.publish(cloud_msg);
+
+      // std_msgs::Float64 pose_quality_msg;
+      // pose_quality_msg.data = pf_->sets[pf_->current_set].p;
+      // pose_quality_pub_.publish(pose_quality_msg);
     }
   }
+
+  ROS_INFO("laserReceived::Resampled: %d, Force: %d", resampled, m_force_update);
 
   if(resampled || force_publication)
   {
     // Read out the current hypotheses
     double max_weight = 0.0;
+    double max_match = 0.0;
     int max_weight_hyp = -1;
     std::vector<amcl_hyp_t> hyps;
     hyps.resize(pf_->sets[pf_->current_set].cluster_count);
@@ -1374,13 +1384,26 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
         hyp_count < pf_->sets[pf_->current_set].cluster_count; hyp_count++)
     {
       double weight;
+      double match;
       pf_vector_t pose_mean;
       pf_matrix_t pose_cov;
-      if (!pf_get_cluster_stats(pf_, hyp_count, &weight, &pose_mean, &pose_cov))
+      if (!pf_get_cluster_stats(pf_, hyp_count, &weight, &pose_mean, &pose_cov , &match))
       {
         ROS_ERROR("Couldn't get stats on cluster %d", hyp_count);
         break;
       }
+
+      ROS_INFO("laserReceived::Cluster stats: weight: %.3f, pose: %.3f %.3f %.3f, p: %.3f",
+               weight,
+               pose_mean.v[0],
+               pose_mean.v[1],
+               pose_mean.v[2],
+               match);
+      
+      // if(match > max_match)
+      // {
+      //   max_match = match;
+      // }
 
       hyps[hyp_count].weight = weight;
       hyps[hyp_count].pf_pose_mean = pose_mean;
@@ -1390,6 +1413,7 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
       {
         max_weight = hyps[hyp_count].weight;
         max_weight_hyp = hyp_count;
+        max_match = match; //take the match index based on the selected particle by pf_ (selection on weights)
       }
     }
 
@@ -1446,6 +1470,10 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 
       pose_pub_.publish(p);
       last_published_pose = p;
+
+      std_msgs::Float64 pose_quality_msg;
+      pose_quality_msg.data = max_match;
+      pose_quality_pub_.publish(pose_quality_msg);
 
       ROS_DEBUG("New pose: %6.3f %6.3f %6.3f",
                hyps[max_weight_hyp].pf_pose_mean.v[0],

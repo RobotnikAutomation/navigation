@@ -36,6 +36,8 @@
 #include "portable_utils.hpp"
 
 
+
+
 // Compute the required number of samples, given that there are k bins
 // with samples in them.
 static int pf_resample_limit(pf_t *pf, int k);
@@ -572,6 +574,7 @@ void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
   
   // Initialize cluster stats
   set->cluster_count = 0;
+  double max_p = 0.0;
 
   for (i = 0; i < set->cluster_max_count; i++)
   {
@@ -614,6 +617,16 @@ void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
     if (cidx + 1 > set->cluster_count)
       set->cluster_count = cidx + 1;
     
+    // Update the cluster statistics
+    if(sample->p > max_p)    
+    {
+      max_p = sample->p;
+    }
+    
+    cluster->p = max_p;
+    
+    //cluster->p += sample->p / set->sample_count;
+
     cluster = set->clusters + cidx;
 
     cluster->count += 1;
@@ -742,7 +755,7 @@ void pf_get_cep_stats(pf_t *pf, pf_vector_t *mean, double *var)
 
 // Get the statistics for a particular cluster.
 int pf_get_cluster_stats(pf_t *pf, int clabel, double *weight,
-                         pf_vector_t *mean, pf_matrix_t *cov)
+                         pf_vector_t *mean, pf_matrix_t *cov, double *p)
 {
   pf_sample_set_t *set;
   pf_cluster_t *cluster;
@@ -756,6 +769,8 @@ int pf_get_cluster_stats(pf_t *pf, int clabel, double *weight,
   *weight = cluster->weight;
   *mean = cluster->mean;
   *cov = cluster->cov;
+
+  *p = cluster->p;
 
   return 1;
 }

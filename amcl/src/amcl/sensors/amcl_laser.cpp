@@ -36,6 +36,7 @@
 #endif
 
 #include "amcl/sensors/amcl_laser.h"
+#include "ros/ros.h"
 
 using namespace amcl;
 
@@ -205,6 +206,7 @@ double AMCLLaser::BeamModel(AMCLLaserData *data, pf_sample_set_t* set)
       p += pz*pz*pz;
     }
 
+    sample->p = p;
     sample->weight *= p;
     total_weight += sample->weight;
   }
