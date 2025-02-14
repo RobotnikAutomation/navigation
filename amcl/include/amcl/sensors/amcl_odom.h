@@ -72,11 +72,12 @@ class AMCLOdom : public AMCLSensor
                             double alpha5);
 
   public: void SetModel( odom_model_t type,
-                         double alpha1,
-                         double alpha2,
-                         double alpha3,
-                         double alpha4,
-                         double alpha5 = 0 );
+                    double min_delta_distance_particles,
+                    double alpha1,
+                    double alpha2,
+                    double alpha3,
+                    double alpha4,
+                    double alpha5 = 0.0);
 
   // Update the filter based on the action model.  Returns true if the filter
   // has been updated.
@@ -89,7 +90,7 @@ class AMCLOdom : public AMCLSensor
   private: odom_model_t model_type;
 
   // Drift parameters
-  private: double alpha1, alpha2, alpha3, alpha4, alpha5;
+  private: double alpha1, alpha2, alpha3, alpha4, alpha5, min_delta_distance_particles;
 };
 
 
