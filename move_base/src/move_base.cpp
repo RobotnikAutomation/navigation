@@ -75,6 +75,9 @@ namespace move_base {
     private_nh.param("planner_patience", planner_patience_, 5.0);
     private_nh.param("controller_patience", controller_patience_, 15.0);
     private_nh.param("max_planning_retries", max_planning_retries_, -1);  // disabled by default
+    // Controller Obstacle Handling
+    private_nh.param("controller_obstacle_wait", controller_obstacle_wait_, 10.0);
+    private_nh.param("controller_success_hysteresis", controller_success_hysteresis_, 5.0);
 
     private_nh.param("oscillation_timeout", oscillation_timeout_, 0.0);
     private_nh.param("oscillation_distance", oscillation_distance_, 0.5);
@@ -175,6 +178,9 @@ namespace move_base {
     dsrv_ = new dynamic_reconfigure::Server<move_base::MoveBaseConfig>(ros::NodeHandle("~"));
     dynamic_reconfigure::Server<move_base::MoveBaseConfig>::CallbackType cb = boost::bind(&MoveBase::reconfigureCB, this, _1, _2);
     dsrv_->setCallback(cb);
+
+    //
+    update_first_invalid_control = true;
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
@@ -210,6 +216,8 @@ namespace move_base {
 
     planner_patience_ = config.planner_patience;
     controller_patience_ = config.controller_patience;
+    controller_obstacle_wait_ = config.controller_obstacle_wait;
+    controller_success_hysteresis_ = config.controller_success_hysteresis;
     max_planning_retries_ = config.max_planning_retries;
     conservative_reset_dist_ = config.conservative_reset_dist;
 
@@ -678,6 +686,10 @@ namespace move_base {
     last_valid_plan_ = ros::Time::now();
     last_oscillation_reset_ = ros::Time::now();
     planning_retries_ = 0;
+    //
+    last_invalid_control_ = ros::Time::now();
+    first_invalid_control_ = ros::Time::now();
+    update_first_invalid_control = true;
 
     ros::NodeHandle n;
     while(n.ok())
@@ -721,6 +733,10 @@ namespace move_base {
           last_valid_plan_ = ros::Time::now();
           last_oscillation_reset_ = ros::Time::now();
           planning_retries_ = 0;
+          //
+          last_invalid_control_ = ros::Time::now();
+          first_invalid_control_ = ros::Time::now();
+          update_first_invalid_control = true;
         }
         else {
           //if we've been preempted explicitly we need to shut things down
@@ -759,6 +775,10 @@ namespace move_base {
         last_valid_plan_ = ros::Time::now();
         last_oscillation_reset_ = ros::Time::now();
         planning_retries_ = 0;
+        //
+        last_invalid_control_ = ros::Time::now();
+        first_invalid_control_ = ros::Time::now();
+        update_first_invalid_control = true;
       }
 
       //for timing that gives real time even in simulation
@@ -907,7 +927,7 @@ namespace move_base {
         
         {
          boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
-        
+        ROS_WARN_STREAM_THROTTLE(1, "**PALEN**: PARAMETERS " << controller_success_hysteresis_ << " " << controller_obstacle_wait_);
         if(tc_->computeVelocityCommands(cmd_vel)){
           ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
@@ -916,10 +936,24 @@ namespace move_base {
           vel_pub_.publish(cmd_vel);
           if(recovery_trigger_ == CONTROLLING_R)
             recovery_index_ = 0;
+          //local planner hasn't failed for a while
+          ros::Time wait_normality = last_invalid_control_ + ros::Duration(controller_success_hysteresis_);
+          if(!update_first_invalid_control && ros::Time::now() > wait_normality){
+            update_first_invalid_control = true;
+            ROS_WARN_STREAM_THROTTLE(1, "\n\n**PALEN**: Back to normal!!!");
+          }
         }
         else {
           ROS_DEBUG_NAMED("move_base", "The local planner could not find a valid plan.");
           ros::Time attempt_end = last_valid_control_ + ros::Duration(controller_patience_);
+          //last time local planner failed
+          last_invalid_control_ = ros::Time::now();
+          //first time local planner has failed (hysteresis)
+          if(update_first_invalid_control){
+            first_invalid_control_ = ros::Time::now();
+            update_first_invalid_control = false;
+          }
+          ros::Time wait_control = first_invalid_control_ + ros::Duration(controller_obstacle_wait_);
 
           //check if we've tried to find a valid control for longer than our time limit
           if(ros::Time::now() > attempt_end){
@@ -928,12 +962,23 @@ namespace move_base {
             state_ = CLEARING;
             recovery_trigger_ = CONTROLLING_R;
           }
+          //wait for the local planner to avoid obstacle by itself
+          else if (ros::Time::now() < wait_control) {
+            ROS_WARN_STREAM_THROTTLE(1, "\n\n**PALEN**: Waiting for local to resolve by itself: " << (wait_control - ros::Time::now()).toSec() << "!!!");
+            publishZeroVelocity();
+          }
+          //global replan
           else{
+            ROS_WARN_STREAM_THROTTLE(1, "\n\n**PALEN**: Calling Global!!!");
             //otherwise, if we can't find a valid control, we'll go back to planning
             last_valid_plan_ = ros::Time::now();
             planning_retries_ = 0;
             state_ = PLANNING;
             publishZeroVelocity();
+            //
+            last_invalid_control_ = ros::Time::now();
+            first_invalid_control_ = ros::Time::now();
+            update_first_invalid_control = true;
 
             //enable the planner thread in case it isn't running on a clock
             boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
