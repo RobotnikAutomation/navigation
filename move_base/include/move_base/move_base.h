@@ -233,6 +233,11 @@ namespace move_base {
       move_base::MoveBaseConfig default_config_;
       bool setup_, p_freq_change_, c_freq_change_;
       bool new_global_plan_;
+
+      // Controller Obstacle Handling
+      ros::Time first_invalid_control_, last_invalid_control_;
+      bool update_first_invalid_control;
+      double controller_obstacle_wait_, controller_success_hysteresis_;
   };
 };
 #endif
