@@ -91,7 +91,7 @@ private:
   bool trinary_costmap_;
   ros::Subscriber map_sub_, map_update_sub_;
 
-  unsigned char lethal_threshold_, unknown_cost_value_;
+  unsigned char lethal_threshold_, unknown_cost_value_, static_obstacle_cost_;
 
   dynamic_reconfigure::Server<costmap_2d::GenericPluginConfig> *dsrv_;
 };

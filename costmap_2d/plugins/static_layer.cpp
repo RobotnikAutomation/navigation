@@ -74,13 +74,22 @@ void StaticLayer::onInitialize()
   nh.param("track_unknown_space", track_unknown_space_, true);
   nh.param("use_maximum", use_maximum_, false);
 
-  int temp_lethal_threshold, temp_unknown_cost_value;
+  int temp_lethal_threshold, temp_unknown_cost_value, temp_static_obstacle_cost;
   nh.param("lethal_cost_threshold", temp_lethal_threshold, int(100));
   nh.param("unknown_cost_value", temp_unknown_cost_value, int(-1));
   nh.param("trinary_costmap", trinary_costmap_, true);
+  nh.param("static_obstacle_cost", temp_static_obstacle_cost, int(LETHAL_OBSTACLE));
 
   lethal_threshold_ = std::max(std::min(temp_lethal_threshold, 100), 0);
   unknown_cost_value_ = temp_unknown_cost_value;
+
+  static_obstacle_cost_ = temp_static_obstacle_cost;
+  // Verify if the value of static_obstacle_cost_ is valid
+  if (static_obstacle_cost_ > LETHAL_OBSTACLE || static_obstacle_cost_ < 0)
+  {
+    static_obstacle_cost_ = LETHAL_OBSTACLE;
+    ROS_WARN("Invalid static_obstacle_cost value, setting to default value: %d", static_obstacle_cost_);
+  }
 
   // Only resubscribe if topic has changed
   if (map_sub_.getTopic() != ros::names::resolve(map_topic))
@@ -155,12 +164,12 @@ unsigned char StaticLayer::interpretValue(unsigned char value)
   else if (!track_unknown_space_ && value == unknown_cost_value_)
     return FREE_SPACE;
   else if (value >= lethal_threshold_)
-    return LETHAL_OBSTACLE;
+    return static_obstacle_cost_;
   else if (trinary_costmap_)
     return FREE_SPACE;
 
   double scale = (double) value / lethal_threshold_;
-  return scale * LETHAL_OBSTACLE;
+  return scale * static_obstacle_cost_;
 }
 
 void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
