@@ -181,6 +181,10 @@ namespace move_base {
 
     //
     update_first_invalid_control = true;
+    if( controller_patience_ < controller_obstacle_wait_){
+      ROS_WARN_NAMED("move_base", "Wrong move_base configuration. controller_patience (%.1f) must be bigger or equal than controller_obstacle_wait (%.1f). Setting controller_patience value to controller_obstacle_wait (%.1f).", controller_patience_, controller_obstacle_wait_, controller_obstacle_wait_);
+      controller_patience_ = controller_obstacle_wait_; 
+    }
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
@@ -217,6 +221,11 @@ namespace move_base {
     planner_patience_ = config.planner_patience;
     controller_patience_ = config.controller_patience;
     controller_obstacle_wait_ = config.controller_obstacle_wait;
+    if( controller_patience_ < controller_obstacle_wait_){
+      ROS_WARN_NAMED("move_base", "Wrong move_base configuration. controller_patience (%.1f) must be bigger or equal than controller_obstacle_wait (%.1f). Setting controller_patience value to controller_obstacle_wait (%.1f).", controller_patience_, controller_obstacle_wait_, controller_obstacle_wait_);
+      controller_patience_ = controller_obstacle_wait_; 
+      config.controller_patience = controller_patience_;
+    }
     controller_success_hysteresis_ = config.controller_success_hysteresis;
     max_planning_retries_ = config.max_planning_retries;
     conservative_reset_dist_ = config.conservative_reset_dist;
