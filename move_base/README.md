@@ -1,4 +1,4 @@
-> ![IMPORTANT] 
+> [!IMPORTANT] 
 > Only Robotnik custom modifications of move_base are discussed below. For anything else, check the [original documentation](http://wiki.ros.org/move_base).
 
 # Robotnik Custom Modification
