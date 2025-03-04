@@ -936,7 +936,6 @@ namespace move_base {
         
         {
          boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(controller_costmap_ros_->getCostmap()->getMutex()));
-        ROS_WARN_STREAM_THROTTLE(1, "**PALEN**: PARAMETERS " << controller_success_hysteresis_ << " " << controller_obstacle_wait_);
         if(tc_->computeVelocityCommands(cmd_vel)){
           ROS_DEBUG_NAMED( "move_base", "Got a valid command from the local planner: %.3lf, %.3lf, %.3lf",
                            cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z );
@@ -949,7 +948,6 @@ namespace move_base {
           ros::Time wait_normality = last_invalid_control_ + ros::Duration(controller_success_hysteresis_);
           if(!update_first_invalid_control && ros::Time::now() > wait_normality){
             update_first_invalid_control = true;
-            ROS_WARN_STREAM_THROTTLE(1, "\n\n**PALEN**: Back to normal!!!");
           }
         }
         else {
@@ -973,12 +971,12 @@ namespace move_base {
           }
           //wait for the local planner to avoid obstacle by itself
           else if (ros::Time::now() < wait_control) {
-            ROS_WARN_STREAM_THROTTLE(1, "\n\n**PALEN**: Waiting for local to resolve by itself: " << (wait_control - ros::Time::now()).toSec() << "!!!");
+            ROS_DEBUG_THROTTLE_NAMED(1.0, "move_base", "Waiting for local to resolve by itself: %.4f", (wait_control - ros::Time::now()).toSec());
             publishZeroVelocity();
           }
           //global replan
           else{
-            ROS_WARN_STREAM_THROTTLE(1, "\n\n**PALEN**: Calling Global!!!");
+            ROS_DEBUG_NAMED("move_base", "Calling Global");
             //otherwise, if we can't find a valid control, we'll go back to planning
             last_valid_plan_ = ros::Time::now();
             planning_retries_ = 0;
