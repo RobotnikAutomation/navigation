@@ -94,6 +94,7 @@ AMCLOdom::SetModelOmni(double alpha1,
 
 void
 AMCLOdom::SetModel( odom_model_t type,
+                    double min_delta_distance_particles,
                     double alpha1,
                     double alpha2,
                     double alpha3,
@@ -106,6 +107,7 @@ AMCLOdom::SetModel( odom_model_t type,
   this->alpha3 = alpha3;
   this->alpha4 = alpha4;
   this->alpha5 = alpha5;
+  this->min_delta_distance_particles = min_delta_distance_particles;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,7 +174,7 @@ bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
     // Avoid computing a bearing from two poses that are extremely near each
     // other (happens on in-place rotation).
     if(sqrt(ndata->delta.v[1]*ndata->delta.v[1] + 
-            ndata->delta.v[0]*ndata->delta.v[0]) < 0.01)
+            ndata->delta.v[0]*ndata->delta.v[0]) < this->min_delta_distance_particles)
       delta_rot1 = 0.0;
     else
       delta_rot1 = angle_diff(atan2(ndata->delta.v[1], ndata->delta.v[0]),
